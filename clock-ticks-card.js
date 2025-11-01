@@ -102,7 +102,12 @@ class ClockTicksCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this.shadowRoot.innerHTML = `<ha-card style="box-sizing:border-box;"></ha-card>`;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display:block; height:100%; }                /* füllt den vom Grid zugewiesenen Raum */
+        ha-card { height:100%; box-sizing:border-box; }      /* Karte dehnt sich mit */
+      </style>
+      <ha-card></ha-card>`;
     this._config = {};
     this._hass = undefined;
     this._connected = false;
@@ -159,26 +164,16 @@ class ClockTicksCard extends HTMLElement {
     this._borderRadiusPx = px;
   }
 
-  // Container-Messung: echte Höhe vom HA-Layout; mehrere Fallbacks + minHeightPx
+  // Container-Messung: echte, vom Grid zugewiesene Größe (Host/ha-card) + minHeight als Untergrenze
   _dims() {
     const minH = Number(this._config.minHeightPx) || 0;
+    const hostRect = this.getBoundingClientRect?.() || { width: 300, height: minH };
     const card = this.shadowRoot.querySelector('ha-card');
+    const cardRect = card?.getBoundingClientRect?.() || hostRect;
 
-    let W = Math.max(1, card?.clientWidth ?? 300);
-    let H = Math.max(0, card?.clientHeight ?? 0);
-
-    // Wenn Höhe verdächtig klein ist, versuche Eltern hoch:
-    if (H < 40) {
-      let el = card;
-      for (let i = 0; i < 8 && el && H < 40; i++) {
-        el = el.parentElement;
-        const h = el ? (el.clientHeight || el.offsetHeight || 0) : 0;
-        H = Math.max(H, h);
-      }
-    }
-
-    // Endgültige Untergrenze erzwingen
-    if (H < minH) H = minH;
+    const W = Math.max(1, cardRect.width || hostRect.width || 300);
+    const Hraw = Math.max(0, cardRect.height || hostRect.height || 0);
+    const H = Math.max(minH, Hraw);
 
     return { W, H };
   }
@@ -226,9 +221,10 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Wrapper füllt Container; Höhe wird explizit gesetzt (gemessener Wert, minHeight greift sonst)
+    // Wrapper füllt Container; Höhe dehnt sich mit, minHeight als Untergrenze
     const wrapperStyle = `
-      position:relative;display:block;width:100%;height:${H}px;
+      position:relative;display:block;width:100%;height:100%;
+      min-height:${this._config.minHeightPx || 0}px;
       border:${outerBorderWidth}px solid ${outerBorderColor};
       border-radius:var(--ha-card-border-radius, 12px);
       background:${bgColor};
