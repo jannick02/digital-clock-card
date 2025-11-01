@@ -1,10 +1,7 @@
 // clock-ticks-card.js
-// Clock Ticks Card – skaliert NUR durch das HA-Layout (UI), kein map/cols/rows-Mapping mehr.
-// Features:
-// - Schriftgröße einstellbar (fontSizePct)
-// - äußerer Rahmen (outerBorderColor / outerBorderWidth)
-// - folgt Theme-Radius (--ha-card-border-radius)
-// - Zeit exakt mittig positioniert
+// Clock Ticks Card – skaliert über Breite + Aspect-Ratio (kein map/cols/rows).
+// Fix gegen "Linie": Aspect-Ratio-Box mit Spacer-Div.
+// Optionen: fontSizePct, outerBorderColor/Width, aspectRatio, Theme-Radius, zentriertes Label.
 
 /***** ---------- UI-Editor ---------- *****/
 class ClockTicksCardEditor extends HTMLElement {
@@ -12,7 +9,6 @@ class ClockTicksCardEditor extends HTMLElement {
   set hass(hass) { this._hass = hass; this.requestUpdate?.(); }
 
   connectedCallback() {
-    this.style.display = 'block';
     if (!this._root) {
       this._root = this.attachShadow({ mode: 'open' });
       this._root.innerHTML = `
@@ -24,7 +20,7 @@ class ClockTicksCardEditor extends HTMLElement {
         <div class="wrap">
           <ha-form></ha-form>
           <div class="hint">
-            Größe wird ausschließlich vom Dashboard-Layout gesteuert (Spalten/Zeilen/Spans).
+            Größe: Breite kommt vom HA-Layout. Höhe = Breite × <code>aspectRatio</code>.
           </div>
         </div>
       `;
@@ -33,17 +29,20 @@ class ClockTicksCardEditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._root) return;
-    const form = this._root.querySelector('ha-form'); if (!form) return;
+    const form = this._root.querySelector('ha-form');
+    if (!form) return;
 
     const schema = [
-      { name: 'entity',     selector: { entity: {} } },
+      { name: 'entity', selector: { entity: {} } },
+
+      // Layout/Größe
+      { name: 'aspectRatio', selector: { number: { min: 0.2, max: 3, step: 0.01 } } }, // Höhe = Breite * aspectRatio
 
       // Farben & Schrift
-      { name: 'bgColor',    selector: { color: {} } },
-      { name: 'borderColor',selector: { color: {} } },
-      { name: 'tickColor',  selector: { color: {} } },
-      { name: 'fontColor',  selector: { color: {} } },
+      { name: 'bgColor', selector: { color: {} } },
+      { name: 'borderColor', selector: { color: {} } },
+      { name: 'tickColor', selector: { color: {} } },
+      { name: 'fontColor', selector: { color: {} } },
       { name: 'fontWeight', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
       { name: 'fontFamily', selector: { text: {} } },
 
@@ -51,35 +50,28 @@ class ClockTicksCardEditor extends HTMLElement {
       { name: 'outerBorderColor', selector: { color: {} } },
       { name: 'outerBorderWidth', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
 
-      // Schriftgröße (in % der kleineren Kante)
+      // Schriftgröße (% der kleineren Kante)
       { name: 'fontSizePct', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
 
-      // Feintuning
-      { name: 'padPct',               selector: { number: { min: 0,  max: 20, step: 0.1, mode: 'slider' } } },
-      { name: 'radiusPct',            selector: { number: { min: 0,  max: 40, step: 0.5, mode: 'slider' } } },
-      { name: 'tickLenPct',           selector: { number: { min: 0,  max: 100,step: 1,   mode: 'slider' } } },
-      { name: 'tickThickPct',         selector: { number: { min: 0,  max: 5,  step: 0.1, mode: 'slider' } } },
-      { name: 'borderPct',            selector: { number: { min: 0,  max: 10, step: 0.1, mode: 'slider' } } },
-      { name: 'labelTransformFactor', selector: { number: { min: -0.5,max: 0.5,step: 0.001 } } }
+      // Feintuning der Grafik
+      { name: 'padPct', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
+      { name: 'radiusPct', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
+      { name: 'tickLenPct', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
+      { name: 'tickThickPct', selector: { number: { min: 0, max: 5, step: 0.1, mode: 'slider' } } },
+      { name: 'borderPct', selector: { number: { min: 0, max: 10, step: 0.1, mode: 'slider' } } },
+      { name: 'labelTransformFactor', selector: { number: { min: -0.5, max: 0.5, step: 0.001 } } }
     ];
 
     form.schema = schema;
     form.data = {
+      aspectRatio: 0.5, // Höhe = 50% der Breite (≈ vorheriger Default)
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
-
-      outerBorderColor: '#FFFFFF',
-      outerBorderWidth: 6,
-
-      fontSizePct: 30,           // % von min(W, H)
-      padPct: 6,                 // Innenabstand in %
-      radiusPct: 18,             // (bleibt als innerer Radius-Skaler für das SVG)
-      tickLenPct: 50,
-      tickThickPct: 0.9,
-      borderPct: 2.4,            // SVG-Innenrahmen
+      outerBorderColor: '#FFFFFF', outerBorderWidth: 6,
+      fontSizePct: 30,
+      padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
-
       ...this._config
     };
     form.hass = this._hass;
@@ -107,6 +99,9 @@ class ClockTicksCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
+      // Layout
+      aspectRatio: 0.5, // H = W * aspectRatio
+
       // Farben & Schrift
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
@@ -151,14 +146,13 @@ class ClockTicksCard extends HTMLElement {
     this._borderRadiusPx = px;
   }
 
-  // Ermittelt aktuelle Containergröße (vom HA-Layout vorgegeben)
+  // Aktuelle Breite vom Container; Höhe = Breite * aspectRatio (Spacer-Pattern)
   _dims() {
     const card = this._root?.querySelector('ha-card');
-    let W = Math.max(0, card?.clientWidth ?? 300);
-    let H = Math.max(0, card?.clientHeight ?? 150); // Fallback, bis Layout misst
-    // Edge-Case: wenn initial H==0 (z.B. im Picker), gib eine plausible Höhe:
-    if (H === 0) H = Math.round(W * 0.5);
-    return { W, H };
+    const W = Math.max(1, card?.clientWidth ?? 300);
+    const ratio = Number(this._config.aspectRatio) || 0.5;
+    const H = Math.max(1, Math.round(W * ratio));
+    return { W, H, ratio };
   }
 
   _renderSVG(entityState) {
@@ -169,14 +163,13 @@ class ClockTicksCard extends HTMLElement {
       fontSizePct, labelTransformFactor, outerBorderColor, outerBorderWidth
     } = c;
 
-    const { W, H } = this._dims();
+    const { W, H, ratio } = this._dims();
     const minWH = Math.min(W, H);
     const pad = (minWH * padPct) / 100;
     const rw = W - 2 * pad;
     const rh = H - 2 * pad;
     const cx = W / 2, cy = H / 2;
 
-    // Theme-Radius → SVG-Radius skaliert
     const themeRadius = this._borderRadiusPx;
     const svgRx = Math.max(0, themeRadius * (Math.min(rw, rh) / Math.min(W, H)));
 
@@ -205,15 +198,17 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Wrapper: füllt Container komplett; HA-Layout bestimmt Höhe/Breite
-    const wrapperStyle =
-      `position:relative;display:block;width:100%;height:100%;
-       overflow:hidden;background:${bgColor};
-       border:${outerBorderWidth}px solid ${outerBorderColor};
-       border-radius:var(--ha-card-border-radius, 12px);
-       box-sizing:border-box;`;
+    // Spacer-Pattern: erzeugt Höhe auch wenn Container-Höhe nicht gesetzt ist.
+    const spacerPct = (ratio * 100).toFixed(4) + '%';
 
-    // Schriftgröße in % der kleineren Kante
+    const wrapperStyle = `
+      position:relative;display:block;width:100%;
+      border:${outerBorderWidth}px solid ${outerBorderColor};
+      border-radius:var(--ha-card-border-radius, 12px);
+      background:${bgColor};
+      overflow:hidden;box-sizing:border-box;
+    `;
+
     const labelFontSize = (minWH * (fontSizePct / 100)).toFixed(2) + 'px';
     const translateYpx = (labelTransformFactor * H).toFixed(2);
     const labelStyle = `
@@ -223,15 +218,14 @@ class ClockTicksCard extends HTMLElement {
       font-weight:${fontWeight};
       font-family:${fontFamily};
       font-size:${labelFontSize};
-      line-height:1;
-      white-space:nowrap;
-      text-align:center;
+      line-height:1;white-space:nowrap;text-align:center;
     `;
 
     return html`
       <div class="card-root" style="${wrapperStyle}">
+        <div class="spacer" style="width:100%; padding-top:${spacerPct};"></div>
         <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none"
-             style="position:absolute;top:0;left:0;">
+             style="position:absolute;inset:0;">
           ${ticks}
           ${rect}
         </svg>
@@ -264,12 +258,12 @@ class ClockTicksCard extends HTMLElement {
 }
 customElements.define('clock-ticks-card', ClockTicksCard);
 
-// Card-Picker-Eintrag
+// Card-Picker
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Uhr-/Label-Karte, skaliert ausschließlich durch das HA-Layout; Theme-Radius, Rahmen & UI-Editor inklusive.',
+  description: 'Füllt die Breite; Höhe = Breite × Aspect-Ratio. Theme-Radius, Rahmen & UI-Editor inklusive.',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
