@@ -1,7 +1,7 @@
 // clock-ticks-card.js
 // Skaliert mit HA-Layout (rows/Spans).
 // Verbesserungen:
-// - Nie wieder „dünner Balken“: min-height + robuste Messung
+// - min-height + robuste Messung
 // - Label-Schrift schneidet unten nicht ab
 // - Deutlichere Bezeichnungen der Optionen im UI (deutsche Beschriftungen)
 
