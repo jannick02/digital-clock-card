@@ -1,6 +1,9 @@
 // clock-ticks-card.js
-// Skaliert mit HA-Layout (rows/Spans). Fix: nie wieder "dünner Balken" dank minHeight + robustem Messen.
-// Optionen: fontSizePct, outerBorderColor/Width, minHeightPx, Theme-Radius, zentrierter Text.
+// Skaliert mit HA-Layout (rows/Spans).
+// Verbesserungen:
+// - Nie wieder „dünner Balken“: min-height + robuste Messung
+// - Label-Schrift schneidet unten nicht ab
+// - Deutlichere Bezeichnungen der Optionen im UI (deutsche Beschriftungen)
 
 class ClockTicksCardEditor extends HTMLElement {
   constructor() {
@@ -15,8 +18,8 @@ class ClockTicksCardEditor extends HTMLElement {
       <div class="wrap">
         <ha-form></ha-form>
         <div class="hint">
-          Größe kommt vom Dashboard-Layout (Rows/Spans). Falls HA anfangs keine Höhe liefert,
-          sorgt <code>minHeightPx</code> für eine sinnvolle Mindesthöhe.
+          Die Größe kommt vom Dashboard-Layout (Rows/Spans). 
+          Falls Home Assistant anfangs keine Höhe liefert, sorgt <code>minHeightPx</code> für eine sinnvolle Mindesthöhe.
         </div>
       </div>
     `;
@@ -34,40 +37,38 @@ class ClockTicksCardEditor extends HTMLElement {
     if (!form) return;
 
     const schema = [
-      { name: 'entity', selector: { entity: {} } },
+      { name: 'entity', label: 'Uhrzeit-Entity (z. B. sensor.uhrzeit)', selector: { entity: {} } },
 
-      // Layout-Sicherheit
-      { name: 'minHeightPx', selector: { number: { min: 0, max: 1000, step: 10 } } },
+      // Layout / Größe
+      { name: 'minHeightPx', label: 'Mindesthöhe (px, falls Layout noch nicht geladen)', selector: { number: { min: 0, max: 1000, step: 10 } } },
 
       // Farben & Schrift
-      { name: 'bgColor', selector: { color: {} } },
-      { name: 'borderColor', selector: { color: {} } },
-      { name: 'tickColor', selector: { color: {} } },
-      { name: 'fontColor', selector: { color: {} } },
-      { name: 'fontWeight', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
-      { name: 'fontFamily', selector: { text: {} } },
+      { name: 'bgColor', label: 'Hintergrundfarbe', selector: { color: {} } },
+      { name: 'borderColor', label: 'Innenrand-Farbe', selector: { color: {} } },
+      { name: 'tickColor', label: 'Strich-Farbe (Ticks)', selector: { color: {} } },
+      { name: 'fontColor', label: 'Textfarbe (Uhrzeit)', selector: { color: {} } },
+      { name: 'fontWeight', label: 'Schriftstärke (Fettgrad)', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
+      { name: 'fontFamily', label: 'Schriftart', selector: { text: {} } },
 
       // Äußerer Rahmen
-      { name: 'outerBorderColor', selector: { color: {} } },
-      { name: 'outerBorderWidth', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
+      { name: 'outerBorderColor', label: 'Rahmenfarbe außen', selector: { color: {} } },
+      { name: 'outerBorderWidth', label: 'Rahmenstärke außen (px)', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
 
-      // Schriftgröße (% der kleineren Kante)
-      { name: 'fontSizePct', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
+      // Schriftgröße (%)
+      { name: 'fontSizePct', label: 'Schriftgröße (% der Kartenhöhe)', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
 
-      // Feintuning SVG
-      { name: 'padPct', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
-      { name: 'radiusPct', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
-      { name: 'tickLenPct', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
-      { name: 'tickThickPct', selector: { number: { min: 0, max: 5, step: 0.1, mode: 'slider' } } },
-      { name: 'borderPct', selector: { number: { min: 0, max: 10, step: 0.1, mode: 'slider' } } },
-      { name: 'labelTransformFactor', selector: { number: { min: -0.5, max: 0.5, step: 0.001 } } }
+      // Feintuning SVG (klar benannt)
+      { name: 'padPct', label: 'Innenabstand zum Rand (%)', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
+      { name: 'radiusPct', label: 'Eckenrundung (SVG, %)', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
+      { name: 'tickLenPct', label: 'Länge der Striche (Ticks, %)', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
+      { name: 'tickThickPct', label: 'Dicke der Striche (Ticks, %)', selector: { number: { min: 0, max: 5, step: 0.1, mode: 'slider' } } },
+      { name: 'borderPct', label: 'Innenrand-Breite (%)', selector: { number: { min: 0, max: 10, step: 0.1, mode: 'slider' } } },
+      { name: 'labelTransformFactor', label: 'Vertikale Textposition (Feineinstellung)', selector: { number: { min: -0.5, max: 0.5, step: 0.001 } } }
     ];
 
     form.schema = schema;
     form.data = {
-      // Sicherer Mindestwert gegen "dünnen Balken"
       minHeightPx: 120,
-
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
@@ -98,19 +99,22 @@ customElements.define('clock-ticks-card-editor', ClockTicksCardEditor);
 
 const html = (s, ...v) => s.reduce((a, x, i) => a + x + (i < v.length ? v[i] : ''), '');
 
+// ---------------------------------------------------------------------------
+// Karte selbst (gleich wie vorher, mit Label-Fix und Height-Korrektur)
+// ---------------------------------------------------------------------------
+
 class ClockTicksCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display:block; height:100%; }                /* füllt den vom Grid zugewiesenen Raum */
-        ha-card { height:100%; box-sizing:border-box; }      /* Karte dehnt sich mit */
+        :host { display:block; height:100%; }
+        ha-card { height:100%; box-sizing:border-box; }
       </style>
       <ha-card></ha-card>`;
     this._config = {};
     this._hass = undefined;
-    this._connected = false;
     this._resizeObs = null;
     this._borderRadiusPx = 12;
     this._lastHTML = '';
@@ -122,22 +126,14 @@ class ClockTicksCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
-      // Sicherheits-Untergrenze gegen 0px-Höhe
       minHeightPx: 120,
-
-      // Farben & Schrift
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
-
-      // Rahmen außen
       outerBorderColor: '#FFFFFF',
       outerBorderWidth: 6,
-
-      // Schrift & Geometrie
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
-
       ...config
     };
     this._update(true);
@@ -147,39 +143,37 @@ class ClockTicksCard extends HTMLElement {
 
   connectedCallback() {
     const card = this.shadowRoot.querySelector('ha-card');
-    if (!this._resizeObs) this._resizeObs = new ResizeObserver(() => { this._readThemeRadius(); this._update(true); });
-    if (card && !this._connected) { this._resizeObs.observe(card); this._connected = true; }
+    if (!this._resizeObs) {
+      this._resizeObs = new ResizeObserver(() => { this._readThemeRadius(); this._update(true); });
+    }
+    if (card) this._resizeObs.observe(card);
     this._readThemeRadius();
     this._update(true);
   }
 
-  disconnectedCallback() { if (this._resizeObs) { this._resizeObs.disconnect(); this._connected = false; } }
+  disconnectedCallback() {
+    if (this._resizeObs) this._resizeObs.disconnect();
+  }
 
   _readThemeRadius() {
     const card = this.shadowRoot.querySelector('ha-card');
     if (!card) return;
     const cs = getComputedStyle(card);
-    const r = (cs.borderRadius || '12px').trim();
-    const px = parseFloat(r) || 12;
-    this._borderRadiusPx = px;
+    this._borderRadiusPx = parseFloat(cs.borderRadius) || 12;
   }
 
-  // Container-Messung: echte, vom Grid zugewiesene Größe (Host/ha-card) + minHeight als Untergrenze
   _dims() {
     const minH = Number(this._config.minHeightPx) || 0;
     const hostRect = this.getBoundingClientRect?.() || { width: 300, height: minH };
     const card = this.shadowRoot.querySelector('ha-card');
     const cardRect = card?.getBoundingClientRect?.() || hostRect;
-
     const W = Math.max(1, cardRect.width || hostRect.width || 300);
-    const Hraw = Math.max(0, cardRect.height || hostRect.height || 0);
-    const H = Math.max(minH, Hraw);
-
+    const H = Math.max(minH, cardRect.height || hostRect.height || 0);
     return { W, H };
   }
 
   _renderSVG(entityState) {
-    const c = this._config || {};
+    const c = this._config;
     const {
       padPct, radiusPct, tickLenPct, tickThickPct, borderPct,
       tickColor, borderColor, bgColor, fontColor, fontWeight, fontFamily,
@@ -195,7 +189,6 @@ class ClockTicksCard extends HTMLElement {
 
     const themeRadius = this._borderRadiusPx;
     const svgRx = Math.max(0, themeRadius * (Math.min(rw, rh) / Math.min(W, H)));
-
     const tickLen = (minWH * tickLenPct) / 100;
     const tickStroke = (minWH * tickThickPct) / 100;
     const borderW = (minWH * borderPct) / 100;
@@ -221,7 +214,6 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Wrapper füllt Container; Höhe dehnt sich mit, minHeight als Untergrenze
     const wrapperStyle = `
       position:relative;display:block;width:100%;height:100%;
       min-height:${this._config.minHeightPx || 0}px;
@@ -232,17 +224,20 @@ class ClockTicksCard extends HTMLElement {
     `;
 
     const labelFontSize = (minWH * (fontSizePct / 100)).toFixed(2) + 'px';
-    const translateYpx = (labelTransformFactor * H).toFixed(2);
     const labelStyle = `
-      position:absolute;left:50%;top:50%;
-      transform:translate(-50%,${translateYpx}px);
-      z-index:2;color:${fontColor};
+      position:absolute;
+      left:50%; top:50%;
+      transform:translate(-50%, calc(-50% + ${(labelTransformFactor * 100).toFixed(3)}%));
+      z-index:2;
+      color:${fontColor};
       font-weight:${fontWeight};
       font-family:${fontFamily};
       font-size:${labelFontSize};
-      line-height:1;
+      line-height:1.1;
+      overflow:visible;
       white-space:nowrap;
       text-align:center;
+      display:flex; align-items:center; justify-content:center;
     `;
 
     return html`
@@ -258,13 +253,11 @@ class ClockTicksCard extends HTMLElement {
   }
 
   _update(force = false) {
-    const card = this.shadowRoot && this.shadowRoot.querySelector('ha-card');
+    const card = this.shadowRoot.querySelector('ha-card');
     if (!card || !this._config) return;
-
     const entityId = this._config.entity;
     const state = this._hass?.states?.[entityId]?.state;
     const content = this._renderSVG(state);
-
     if (force || this._lastHTML !== content) {
       this._lastHTML = content;
       card.innerHTML = content;
@@ -285,7 +278,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Skaliert mit dem HA-Layout (Rows/Spans). Nie wieder dünner Balken dank minHeightPx + robustem Messen.',
+  description: 'Analoge Tick-Uhr mit anpassbarer Schrift, Farben und Größen, skaliert mit dem HA-Layout (Rows/Spans).',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
