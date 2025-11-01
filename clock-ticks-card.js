@@ -1,6 +1,9 @@
 // clock-ticks-card.js
-// Karte + integrierter UI-Editor + Card-Picker + Container-Size-Mode
-// Fixes: 1) Theme-Border-Radius wird übernommen  2) Label exakt mittig
+// Clock Ticks Card – vollständige Version mit:
+// - einstellbarer Schriftgröße (fontSizePct)
+// - flexiblem Seitenverhältnis (container-Mode)
+// - äußerem Rahmen (outerBorderColor / outerBorderWidth)
+// - Theme-Radius & zentriertem Label
 
 /***** ---------- UI-Editor ---------- *****/
 class ClockTicksCardEditor extends HTMLElement {
@@ -20,7 +23,7 @@ class ClockTicksCardEditor extends HTMLElement {
         <div class="wrap">
           <ha-form></ha-form>
           <div class="hint">
-            <b>Hinweis:</b> <code>sizeMode: container</code> passt die Karte ans Dashboard-Grid an.
+            <b>Hinweis:</b> Im <code>container</code>-Modus bestimmt das Verhältnis von <code>cols/rows</code> die Höhe.
           </div>
         </div>
       `;
@@ -36,17 +39,28 @@ class ClockTicksCardEditor extends HTMLElement {
       { name: 'entity', selector: { entity: {} } },
       { name: 'sizeMode', selector: { select: {
           options: [
-            { value: 'container', label: 'container (empfohlen)' },
-            { value: 'map', label: 'map (feste Pixel wie früher)' }
+            { value: 'container', label: 'container (empfohlen, flexibel)' },
+            { value: 'map', label: 'map (feste Pixel laut Mapping)' }
           ] } } },
       { name: 'cols', selector: { select: { options: [6,7,8,9,10,11,12].map(v => ({ value: v, label: String(v) })) } } },
       { name: 'rows', selector: { select: { options: [1,2,3,4,5,6,7].map(v => ({ value: v, label: String(v) })) } } },
+
+      // Farben & Schrift
       { name: 'bgColor', selector: { color: {} } },
       { name: 'borderColor', selector: { color: {} } },
       { name: 'tickColor', selector: { color: {} } },
       { name: 'fontColor', selector: { color: {} } },
       { name: 'fontWeight', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
       { name: 'fontFamily', selector: { text: {} } },
+
+      // NEU: äußerer Rahmen
+      { name: 'outerBorderColor', selector: { color: {} } },
+      { name: 'outerBorderWidth', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
+
+      // Schriftgröße
+      { name: 'fontSizePct', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
+
+      // Feintuning
       { name: 'padPct', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
       { name: 'radiusPct', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
       { name: 'tickLenPct', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
@@ -62,6 +76,11 @@ class ClockTicksCardEditor extends HTMLElement {
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
+
+      fontSizePct: 30,
+      outerBorderColor: '#FFFFFF',
+      outerBorderWidth: 6,
+
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
       ...this._config
@@ -81,7 +100,7 @@ class ClockTicksCardEditor extends HTMLElement {
 customElements.define('clock-ticks-card-editor', ClockTicksCardEditor);
 
 /***** ---------- Karte ---------- *****/
-const html = (strings, ...values) => strings.reduce((acc, s, i) => acc + s + (i < values.length ? values[i] : ''), '');
+const html = (s, ...v) => s.reduce((a, x, i) => a + x + (i < v.length ? v[i] : ''), '');
 
 class ClockTicksCard extends HTMLElement {
   static get properties() { return { hass: {}, _config: {} }; }
@@ -91,11 +110,14 @@ class ClockTicksCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
-      sizeMode: 'container', // 'container' | 'map'
+      sizeMode: 'container',
       cols: 6, rows: 2,
-      padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
-      fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", sans-serif',
+      fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
+      fontSizePct: 30,
+      outerBorderColor: '#FFFFFF',
+      outerBorderWidth: 6,
+      padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
       ...config
     };
@@ -103,7 +125,6 @@ class ClockTicksCard extends HTMLElement {
   }
 
   static getConfigElement() { return document.createElement('clock-ticks-card-editor'); }
-  static getStubConfig() { return { type: 'custom:clock-ticks-card', entity: 'sensor.time', cols: 6, rows: 2, sizeMode: 'container' }; }
 
   _connected = false; _resizeObs = null; _borderRadiusPx = 12;
 
@@ -118,26 +139,15 @@ class ClockTicksCard extends HTMLElement {
     this._readThemeRadius();
     this._update(true);
   }
+
   disconnectedCallback() { if (this._resizeObs) { this._resizeObs.disconnect(); this._connected = false; } }
 
   _readThemeRadius() {
-    // hole den effektiven border-radius (z. B. aus --ha-card-border-radius)
-    const card = this._root?.querySelector('ha-card');
-    if (!card) return;
+    const card = this._root?.querySelector('ha-card'); if (!card) return;
     const cs = getComputedStyle(card);
     const r = (cs.borderRadius || '12px').trim();
     const px = parseFloat(r) || 12;
     this._borderRadiusPx = px;
-  }
-
-  getCardSize() {
-    const { rows = 2, sizeMode = 'container' } = this._config || {};
-    if (sizeMode === 'map') {
-      const hmap = {1:56,2:120,3:184,4:248,5:312,6:376,7:440};
-      const h = hmap[rows] ?? 120;
-      return Math.max(1, Math.round(h / 56));
-    }
-    return 3;
   }
 
   _dims() {
@@ -146,42 +156,39 @@ class ClockTicksCard extends HTMLElement {
     const hMap = {1:56,2:120,3:184,4:248,5:312,6:376,7:440};
     const mapW = wMap[cols] ?? 247;
     const mapH = hMap[rows] ?? 120;
-    if (sizeMode === 'map') return { W: mapW, H: mapH, ratio: mapW / mapH };
+    if (sizeMode === 'map') return { W: mapW, H: mapH };
 
     const card = this._root?.querySelector('ha-card');
     const cw = Math.max(0, card?.clientWidth ?? mapW);
-    const ratio = (mapW / mapH) || (247/120);
-    const ch = Math.round(cw / ratio);
-    return { W: cw, H: ch, ratio };
+    const ratio = (mapH / mapW) || (120/247);
+    const ch = Math.round(cw * ratio);
+    return { W: cw, H: ch };
   }
 
   _renderSVG(entityState) {
     const c = this._config || {};
     const {
       padPct, radiusPct, tickLenPct, tickThickPct, borderPct,
-      tickColor, borderColor, bgColor, cols = 6, rows = 2, labelTransformFactor,
-      fontColor, fontWeight, fontFamily, sizeMode = 'container'
+      tickColor, borderColor, bgColor, fontColor, fontWeight, fontFamily,
+      fontSizePct, labelTransformFactor, sizeMode, outerBorderColor, outerBorderWidth
     } = c;
 
-    const { W, H, ratio } = this._dims();
-
+    const { W, H } = this._dims();
     const minWH = Math.min(W, H);
     const pad = (minWH * padPct) / 100;
-    const rw  = W - 2 * pad;
-    const rh  = H - 2 * pad;
-    const cx  = W / 2;
-    const cy  = H / 2;
+    const rw = W - 2 * pad;
+    const rh = H - 2 * pad;
+    const cx = W / 2, cy = H / 2;
 
-    const themeRadius = this._borderRadiusPx; // aus getComputedStyle
-    // skaliere SVG-Radius grob proportional auf den inneren Zeichenbereich
+    const themeRadius = this._borderRadiusPx;
     const svgRx = Math.max(0, themeRadius * (Math.min(rw, rh) / Math.min(W, H)));
 
     const tickLen = (minWH * tickLenPct) / 100;
     const tickStroke = (minWH * tickThickPct) / 100;
     const borderW = (minWH * borderPct) / 100;
 
-    const innerEx = rw/2 - rh*0.10;
-    const innerEy = rh/2 - rh*0.10;
+    const innerEx = rw / 2 - rh * 0.10;
+    const innerEy = rh / 2 - rh * 0.10;
     const outerEx = innerEx + tickLen;
     const outerEy = innerEy + tickLen;
 
@@ -201,21 +208,24 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Wrapper: Border-Radius direkt aus Theme-Var nutzen + overflow:hidden (clippt SVG sauber)
-    const wrapperStyle = sizeMode === 'map'
-      ? `position:relative;display:block;width:${W}px;height:${H}px;overflow:hidden;background:${bgColor};border-radius:var(--ha-card-border-radius, 12px);box-sizing:border-box;`
-      : `position:relative;display:block;width:100%;aspect-ratio:${ratio};overflow:hidden;background:${bgColor};border-radius:var(--ha-card-border-radius, 12px);box-sizing:border-box;`;
+    const wrapperStyle = `
+      position:relative;display:block;
+      width:100%;height:${H}px;
+      overflow:hidden;
+      background:${bgColor};
+      border:${outerBorderWidth}px solid ${outerBorderColor};
+      border-radius:var(--ha-card-border-radius, 12px);
+      box-sizing:border-box;
+    `;
 
-    // Label exakt mittig: absolute + translate(-50%, yOffset)
-    const labelFontSize = (Math.min(W, H) * 0.30).toFixed(2) + 'px';
+    const labelFontSize = (minWH * (fontSizePct / 100)).toFixed(2) + 'px';
     const translateYpx = (labelTransformFactor * H).toFixed(2);
     const labelStyle = `
       position:absolute;left:50%;top:50%;
-      transform: translate(-50%, ${translateYpx}px);
+      transform:translate(-50%,${translateYpx}px);
       z-index:2;color:${fontColor};
       font-weight:${fontWeight};
       font-family:${fontFamily};
-      font-stretch:condensed;
       font-size:${labelFontSize};
       line-height:1;
       white-space:nowrap;
@@ -224,12 +234,11 @@ class ClockTicksCard extends HTMLElement {
 
     return html`
       <div class="card-root" style="${wrapperStyle}">
-        <div class="svg-wrap" style="position:absolute;inset:0;">
-          <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none" style="position:absolute;top:0;left:0;">
-            ${ticks}
-            ${rect}
-          </svg>
-        </div>
+        <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none"
+             style="position:absolute;top:0;left:0;">
+          ${ticks}
+          ${rect}
+        </svg>
         <div class="label" style="${labelStyle}">${entityState ?? '—'}</div>
       </div>
     `;
@@ -241,7 +250,6 @@ class ClockTicksCard extends HTMLElement {
 
     const entityId = this._config.entity;
     const state = this._hass?.states?.[entityId]?.state;
-
     const content = this._renderSVG(state);
     if (force || this._lastHTML !== content) {
       this._lastHTML = content;
@@ -259,12 +267,11 @@ class ClockTicksCard extends HTMLElement {
 }
 customElements.define('clock-ticks-card', ClockTicksCard);
 
-// Karten-Picker
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Uhr-/Label-Karte mit SVG-Ticks, UI-Editor, Container-Größe & Theme-Radius',
+  description: 'Uhr-/Label-Karte mit SVG-Ticks, UI-Editor, flexiblem Seitenverhältnis, Theme-Radius & äußerem Rahmen',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
