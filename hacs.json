@@ -1,0 +1,7 @@
+{
+  "name": "Clock Ticks Card",
+  "render_readme": true,
+  "filename": "clock-ticks-card.js",
+  "country": "DE",
+  "homeassistant": "2023.0.0"
+}
