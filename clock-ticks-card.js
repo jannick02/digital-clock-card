@@ -257,7 +257,7 @@ class ClockTicksCard extends HTMLElement {
     const secondsFO = html`
       <defs>
         <mask id="tick-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
-          <rect x="0" y="0" width="${W}" height="${H}" fill="black"/>
+          <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
           ${ticksMask}
         </mask>
       </defs>
@@ -269,7 +269,7 @@ class ClockTicksCard extends HTMLElement {
             @keyframes sweep-spin { to { transform: rotate(360deg); } }
           </style>
           <div style="
-            position:absolute; width:250px; height:250px;
+            position:absolute; width:500px; height:500px;
             left:${cx - 125}px; top:${cy - 125}px;
             background: conic-gradient(grey, grey, black);
             transform-origin:center;
