@@ -1,9 +1,7 @@
 // clock-ticks-card.js
 // Skaliert mit HA-Layout (rows/Spans).
-// Verbesserungen:
-// - min-height + robuste Messung
-// - Label-Schrift schneidet unten nicht ab
-// - Deutlichere Bezeichnungen der Optionen im UI (deutsche Beschriftungen)
+// Fixes: min-height + robuste Messung, Label-Fix, verständliche UI-Labels
+// Neu: Sekunden-Sweep via conic-gradient (per UI-Schalter ein/aus)
 
 class ClockTicksCardEditor extends HTMLElement {
   constructor() {
@@ -18,7 +16,7 @@ class ClockTicksCardEditor extends HTMLElement {
       <div class="wrap">
         <ha-form></ha-form>
         <div class="hint">
-          Die Größe kommt vom Dashboard-Layout (Rows/Spans). 
+          Die Größe kommt vom Dashboard-Layout (Rows/Spans).
           Falls Home Assistant anfangs keine Höhe liefert, sorgt <code>minHeightPx</code> für eine sinnvolle Mindesthöhe.
         </div>
       </div>
@@ -42,6 +40,9 @@ class ClockTicksCardEditor extends HTMLElement {
       // Layout / Größe
       { name: 'minHeightPx', label: 'Mindesthöhe (px, falls Layout noch nicht geladen)', selector: { number: { min: 0, max: 1000, step: 10 } } },
 
+      // Sekundenanzeige
+      { name: 'showSecondsSweep', label: 'Sekundenanzeige (animierter Ring)', selector: { boolean: {} } },
+
       // Farben & Schrift
       { name: 'bgColor', label: 'Hintergrundfarbe', selector: { color: {} } },
       { name: 'borderColor', label: 'Innenrand-Farbe', selector: { color: {} } },
@@ -57,7 +58,7 @@ class ClockTicksCardEditor extends HTMLElement {
       // Schriftgröße (%)
       { name: 'fontSizePct', label: 'Schriftgröße (% der Kartenhöhe)', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
 
-      // Feintuning SVG (klar benannt)
+      // Feintuning SVG
       { name: 'padPct', label: 'Innenabstand zum Rand (%)', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
       { name: 'radiusPct', label: 'Eckenrundung (SVG, %)', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
       { name: 'tickLenPct', label: 'Länge der Striche (Ticks, %)', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
@@ -69,13 +70,13 @@ class ClockTicksCardEditor extends HTMLElement {
     form.schema = schema;
     form.data = {
       minHeightPx: 120,
+      showSecondsSweep: true,
+
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
-
       outerBorderColor: '#FFFFFF',
       outerBorderWidth: 6,
-
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
@@ -100,8 +101,6 @@ customElements.define('clock-ticks-card-editor', ClockTicksCardEditor);
 const html = (s, ...v) => s.reduce((a, x, i) => a + x + (i < v.length ? v[i] : ''), '');
 
 // ---------------------------------------------------------------------------
-// Karte selbst (gleich wie vorher, mit Label-Fix und Height-Korrektur)
-// ---------------------------------------------------------------------------
 
 class ClockTicksCard extends HTMLElement {
   constructor() {
@@ -115,6 +114,7 @@ class ClockTicksCard extends HTMLElement {
       <ha-card></ha-card>`;
     this._config = {};
     this._hass = undefined;
+    this._connected = false;
     this._resizeObs = null;
     this._borderRadiusPx = 12;
     this._lastHTML = '';
@@ -127,6 +127,8 @@ class ClockTicksCard extends HTMLElement {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
       minHeightPx: 120,
+      showSecondsSweep: true,
+
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
       outerBorderColor: '#FFFFFF',
@@ -134,6 +136,7 @@ class ClockTicksCard extends HTMLElement {
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
+
       ...config
     };
     this._update(true);
@@ -143,23 +146,21 @@ class ClockTicksCard extends HTMLElement {
 
   connectedCallback() {
     const card = this.shadowRoot.querySelector('ha-card');
-    if (!this._resizeObs) {
-      this._resizeObs = new ResizeObserver(() => { this._readThemeRadius(); this._update(true); });
-    }
-    if (card) this._resizeObs.observe(card);
+    if (!this._resizeObs) this._resizeObs = new ResizeObserver(() => { this._readThemeRadius(); this._update(true); });
+    if (card && !this._connected) { this._resizeObs.observe(card); this._connected = true; }
     this._readThemeRadius();
     this._update(true);
   }
 
-  disconnectedCallback() {
-    if (this._resizeObs) this._resizeObs.disconnect();
-  }
+  disconnectedCallback() { if (this._resizeObs) { this._resizeObs.disconnect(); this._connected = false; } }
 
   _readThemeRadius() {
     const card = this.shadowRoot.querySelector('ha-card');
     if (!card) return;
     const cs = getComputedStyle(card);
-    this._borderRadiusPx = parseFloat(cs.borderRadius) || 12;
+    const r = (cs.borderRadius || '12px').trim();
+    const px = parseFloat(r) || 12;
+    this._borderRadiusPx = px;
   }
 
   _dims() {
@@ -168,16 +169,18 @@ class ClockTicksCard extends HTMLElement {
     const card = this.shadowRoot.querySelector('ha-card');
     const cardRect = card?.getBoundingClientRect?.() || hostRect;
     const W = Math.max(1, cardRect.width || hostRect.width || 300);
-    const H = Math.max(minH, cardRect.height || hostRect.height || 0);
+    const Hraw = Math.max(0, cardRect.height || hostRect.height || 0);
+    const H = Math.max(minH, Hraw);
     return { W, H };
   }
 
   _renderSVG(entityState) {
-    const c = this._config;
+    const c = this._config || {};
     const {
       padPct, radiusPct, tickLenPct, tickThickPct, borderPct,
       tickColor, borderColor, bgColor, fontColor, fontWeight, fontFamily,
-      fontSizePct, labelTransformFactor, outerBorderColor, outerBorderWidth
+      fontSizePct, labelTransformFactor, outerBorderColor, outerBorderWidth,
+      showSecondsSweep
     } = c;
 
     const { W, H } = this._dims();
@@ -198,7 +201,9 @@ class ClockTicksCard extends HTMLElement {
     const outerEx = innerEx + tickLen;
     const outerEy = innerEy + tickLen;
 
-    let ticks = '';
+    // Ticks für Maske und (sichtbar) als Linien
+    let ticksMask = '';
+    let ticksVisible = '';
     for (let i = 0; i < 60; i++) {
       const a = (i * 6) * Math.PI / 180;
       const cos = Math.cos(a), sin = Math.sin(a);
@@ -207,12 +212,18 @@ class ClockTicksCard extends HTMLElement {
       const x2 = cx + cos * innerEx;
       const y2 = cy + sin * innerEy;
       const sw = (i % 5 === 0) ? tickStroke * 1.6 : tickStroke;
-      ticks += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${tickColor}" stroke-width="${sw}" stroke-linecap="round"/>`;
+      ticksMask += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="white" stroke-width="${sw}" stroke-linecap="round"/>`;
+      ticksVisible += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${tickColor}" stroke-width="${sw}" stroke-linecap="round"/>`;
     }
 
     const rect = `<rect x="${pad}" y="${pad}" width="${rw}" height="${rh}"
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
+
+    // Sekunden-Animation vorbereiten
+    const now = new Date();
+    const secondsPhase = (now.getSeconds() + now.getMilliseconds()/1000).toFixed(3);
+    const negDelay = `-${secondsPhase}s`;
 
     const wrapperStyle = `
       position:relative;display:block;width:100%;height:100%;
@@ -225,27 +236,43 @@ class ClockTicksCard extends HTMLElement {
 
     const labelFontSize = (minWH * (fontSizePct / 100)).toFixed(2) + 'px';
     const labelStyle = `
-      position:absolute;
-      left:50%; top:50%;
+      position:absolute; left:50%; top:50%;
       transform:translate(-50%, calc(-50% + ${(labelTransformFactor * 100).toFixed(3)}%));
-      z-index:2;
-      color:${fontColor};
-      font-weight:${fontWeight};
-      font-family:${fontFamily};
-      font-size:${labelFontSize};
-      line-height:1.1;
-      overflow:visible;
-      white-space:nowrap;
-      text-align:center;
+      z-index:2; color:${fontColor}; font-weight:${fontWeight}; font-family:${fontFamily};
+      font-size:${labelFontSize}; line-height:1.1; overflow:visible; white-space:nowrap; text-align:center;
       display:flex; align-items:center; justify-content:center;
     `;
+
+    // Sekunden-Sweep (nur wenn aktiviert)
+    const secondsFO = showSecondsSweep ? html`
+      <defs>
+        <mask id="tick-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
+          <rect x="0" y="0" width="${W}" height="${H}" fill="black"/>
+          ${ticksMask}
+        </mask>
+      </defs>
+      <foreignObject x="0" y="0" width="${W}" height="${H}" style="mask: url(#tick-mask);">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="position:relative;width:100%;height:100%;">
+          <style>@keyframes sweep-spin { to { transform: rotate(360deg); } }</style>
+          <div style="
+            position:absolute; width: 250px; height: 250px;
+            left: ${cx - 125}px; top: ${cy - 125}px;
+            background: conic-gradient(grey, grey, black);
+            transform-origin: 50% 50%;
+            animation: sweep-spin 60s linear infinite;
+            animation-delay: ${negDelay};
+          "></div>
+        </div>
+      </foreignObject>
+    ` : '';
 
     return html`
       <div class="card-root" style="${wrapperStyle}">
         <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none"
              style="position:absolute;inset:0;">
-          ${ticks}
           ${rect}
+          ${ticksVisible}
+          ${secondsFO}
         </svg>
         <div class="label" style="${labelStyle}">${entityState ?? '—'}</div>
       </div>
@@ -253,11 +280,13 @@ class ClockTicksCard extends HTMLElement {
   }
 
   _update(force = false) {
-    const card = this.shadowRoot.querySelector('ha-card');
+    const card = this.shadowRoot && this.shadowRoot.querySelector('ha-card');
     if (!card || !this._config) return;
+
     const entityId = this._config.entity;
     const state = this._hass?.states?.[entityId]?.state;
     const content = this._renderSVG(state);
+
     if (force || this._lastHTML !== content) {
       this._lastHTML = content;
       card.innerHTML = content;
@@ -278,7 +307,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Analoge Tick-Uhr mit anpassbarer Schrift, Farben und Größen, skaliert mit dem HA-Layout (Rows/Spans).',
+  description: 'Analoge Tick-Uhr mit optionaler Sekundenanzeige (conic-gradient), skaliert mit dem HA-Layout.',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
