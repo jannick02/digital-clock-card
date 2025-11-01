@@ -1,12 +1,11 @@
 // clock-ticks-card.js
-// Robust: Editor & Karte initialisieren ihr Shadow DOM im Konstruktor.
-// Optionen: aspectRatio, fontSizePct, outerBorderColor/Width, Theme-Radius, zentrierter Text.
+// Skaliert NUR mit dem HA-Layout: Breite & Höhe kommen vom Container (rows/cols/Spans).
+// Features: anpassbare Schrift (fontSizePct), äußerer Rahmen, Theme-Radius, zentrierter Text.
+// Robust: Shadow DOM im Konstruktor; keine Null-Refs; ResizeObserver.
 
-/***** ---------- UI-Editor ---------- *****/
 class ClockTicksCardEditor extends HTMLElement {
   constructor() {
     super();
-    // Shadow DOM sofort anlegen → immer verfügbar, auch wenn setConfig vor connectedCallback kommt
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `
       <style>
@@ -17,39 +16,25 @@ class ClockTicksCardEditor extends HTMLElement {
       <div class="wrap">
         <ha-form></ha-form>
         <div class="hint">
-          Größe: Breite kommt vom HA-Layout. Höhe = Breite × <code>aspectRatio</code>.
+          Größe kommt vollständig vom Dashboard-Layout (Spalten/Zeilen/Spans). Keine Ratio-Option.
         </div>
       </div>
     `;
     this._config = {};
     this._hass = undefined;
+    this._bound = false;
   }
 
-  setConfig(config) {
-    this._config = config || {};
-    this._render();
-  }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._render();
-  }
-
-  connectedCallback() {
-    this._render();
-  }
+  setConfig(config) { this._config = config || {}; this._render(); }
+  set hass(hass) { this._hass = hass; this._render(); }
+  connectedCallback() { this._render(); }
 
   _render() {
-    const root = this.shadowRoot;
-    if (!root) return;
-    const form = root.querySelector('ha-form');
+    const form = this.shadowRoot.querySelector('ha-form');
     if (!form) return;
 
     const schema = [
       { name: 'entity', selector: { entity: {} } },
-
-      // Layout/Größe
-      { name: 'aspectRatio', selector: { number: { min: 0.2, max: 3, step: 0.01 } } },
 
       // Farben & Schrift
       { name: 'bgColor', selector: { color: {} } },
@@ -66,7 +51,7 @@ class ClockTicksCardEditor extends HTMLElement {
       // Schriftgröße (% der kleineren Kante)
       { name: 'fontSizePct', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
 
-      // Feintuning der Grafik
+      // Feintuning SVG
       { name: 'padPct', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
       { name: 'radiusPct', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
       { name: 'tickLenPct', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
@@ -77,11 +62,13 @@ class ClockTicksCardEditor extends HTMLElement {
 
     form.schema = schema;
     form.data = {
-      aspectRatio: 0.5,
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
-      outerBorderColor: '#FFFFFF', outerBorderWidth: 6,
+
+      outerBorderColor: '#FFFFFF',
+      outerBorderWidth: 6,
+
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
@@ -89,7 +76,6 @@ class ClockTicksCardEditor extends HTMLElement {
     };
     form.hass = this._hass;
 
-    // Einmalig Listener binden (nicht stapeln)
     if (!this._bound) {
       this._bound = true;
       form.addEventListener('value-changed', (ev) => {
@@ -103,13 +89,11 @@ class ClockTicksCardEditor extends HTMLElement {
 }
 customElements.define('clock-ticks-card-editor', ClockTicksCardEditor);
 
-/***** ---------- Karte ---------- *****/
 const html = (s, ...v) => s.reduce((a, x, i) => a + x + (i < v.length ? v[i] : ''), '');
 
 class ClockTicksCard extends HTMLElement {
   constructor() {
     super();
-    // Shadow DOM sofort anlegen → ha-card existiert immer
     this.attachShadow({ mode: 'open' });
     this.shadowRoot.innerHTML = `<ha-card style="box-sizing:border-box;"></ha-card>`;
     this._config = {};
@@ -121,22 +105,24 @@ class ClockTicksCard extends HTMLElement {
   }
 
   static get properties() { return { hass: {}, _config: {} }; }
-
-  set hass(hass) {
-    this._hass = hass;
-    this._update();
-  }
+  set hass(hass) { this._hass = hass; this._update(); }
 
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
-      aspectRatio: 0.5, // H = W * aspectRatio
+      // Farben & Schrift
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
-      outerBorderColor: '#FFFFFF', outerBorderWidth: 6,
+
+      // Rahmen außen
+      outerBorderColor: '#FFFFFF',
+      outerBorderWidth: 6,
+
+      // Schrift & Geometrie
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
+
       ...config
     };
     this._update(true);
@@ -145,7 +131,6 @@ class ClockTicksCard extends HTMLElement {
   static getConfigElement() { return document.createElement('clock-ticks-card-editor'); }
 
   connectedCallback() {
-    // ResizeObserver erst hier, ha-card existiert aber schon (Konstruktor)
     const card = this.shadowRoot.querySelector('ha-card');
     if (!this._resizeObs) this._resizeObs = new ResizeObserver(() => { this._readThemeRadius(); this._update(true); });
     if (card && !this._connected) { this._resizeObs.observe(card); this._connected = true; }
@@ -153,9 +138,7 @@ class ClockTicksCard extends HTMLElement {
     this._update(true);
   }
 
-  disconnectedCallback() {
-    if (this._resizeObs) { this._resizeObs.disconnect(); this._connected = false; }
-  }
+  disconnectedCallback() { if (this._resizeObs) { this._resizeObs.disconnect(); this._connected = false; } }
 
   _readThemeRadius() {
     const card = this.shadowRoot.querySelector('ha-card');
@@ -166,12 +149,25 @@ class ClockTicksCard extends HTMLElement {
     this._borderRadiusPx = px;
   }
 
+  // Nimmt die Container-Höhe (rows) wirklich ab:
   _dims() {
     const card = this.shadowRoot.querySelector('ha-card');
-    const W = Math.max(1, card?.clientWidth ?? 300);
-    const ratio = Number(this._config.aspectRatio) || 0.5;
-    const H = Math.max(1, Math.round(W * ratio));
-    return { W, H, ratio };
+    let W = Math.max(1, card?.clientWidth ?? 300);
+    let H = Math.max(0, card?.clientHeight ?? 0);
+
+    // Wenn HA den Height noch nicht gesetzt hat, versuche Eltern hochzuklettern:
+    if (H <= 1) {
+      let el = card;
+      for (let i = 0; i < 6 && el && H <= 1; i++) {
+        el = el.parentElement;
+        const h = el ? (el.clientHeight || el.offsetHeight || 0) : 0;
+        H = Math.max(H, h);
+      }
+    }
+    // Falls immer noch 0 → letzter Fallback (verhindert "Linie", wird beim nächsten Resize ersetzt)
+    if (H <= 1) H = Math.round(W * 0.5);
+
+    return { W, H };
   }
 
   _renderSVG(entityState) {
@@ -182,7 +178,7 @@ class ClockTicksCard extends HTMLElement {
       fontSizePct, labelTransformFactor, outerBorderColor, outerBorderWidth
     } = c;
 
-    const { W, H, ratio } = this._dims();
+    const { W, H } = this._dims();
     const minWH = Math.min(W, H);
     const pad = (minWH * padPct) / 100;
     const rw = W - 2 * pad;
@@ -217,11 +213,9 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Spacer-Pattern (Height via padding-top)
-    const spacerPct = (ratio * 100).toFixed(4) + '%';
-
+    // Wrapper füllt Container vollständig (Breite & Höhe aus HA)
     const wrapperStyle = `
-      position:relative;display:block;width:100%;
+      position:relative;display:block;width:100%;height:100%;
       border:${outerBorderWidth}px solid ${outerBorderColor};
       border-radius:var(--ha-card-border-radius, 12px);
       background:${bgColor};
@@ -237,12 +231,13 @@ class ClockTicksCard extends HTMLElement {
       font-weight:${fontWeight};
       font-family:${fontFamily};
       font-size:${labelFontSize};
-      line-height:1;white-space:nowrap;text-align:center;
+      line-height:1;
+      white-space:nowrap;
+      text-align:center;
     `;
 
     return html`
       <div class="card-root" style="${wrapperStyle}">
-        <div class="spacer" style="width:100%; padding-top:${spacerPct};"></div>
         <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none"
              style="position:absolute;inset:0;">
           ${ticks}
@@ -277,12 +272,11 @@ class ClockTicksCard extends HTMLElement {
 }
 customElements.define('clock-ticks-card', ClockTicksCard);
 
-// Card-Picker
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Füllt die Breite; Höhe = Breite × Aspect-Ratio. Theme-Radius, Rahmen & UI-Editor inklusive.',
+  description: 'Skaliert vollständig mit dem HA-Layout (Rows/Spans). Theme-Radius, Rahmen & UI-Editor inklusive.',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
