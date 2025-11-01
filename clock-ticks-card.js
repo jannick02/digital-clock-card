@@ -6,6 +6,7 @@
 // - Deutlichere Bezeichnungen der Optionen im UI (deutsche Beschriftungen)
 // Neu:
 // - Conic-Gradient als Hintergrund, nur durch Tick-Schlitze sichtbar (Maske), mittig & 60s/360° synchron.
+// - Innen-Rechteck ("Zifferblatt") überdeckt innere Tick-Bereiche.
 
 class ClockTicksCardEditor extends HTMLElement {
   constructor() {
@@ -200,7 +201,7 @@ class ClockTicksCard extends HTMLElement {
     const outerEx = innerEx + tickLen;
     const outerEy = innerEy + tickLen;
 
-    // ---- Ticks als Maske (weiß = sichtbar) ----
+    // ---- Ticks als Maske (weiß = sichtbar, schwarz = versteckt) ----
     let ticksMask = '';
     for (let i = 0; i < 60; i++) {
       const a = (i * 6) * Math.PI / 180;
@@ -214,10 +215,16 @@ class ClockTicksCard extends HTMLElement {
                     stroke="white" stroke-width="${sw}" stroke-linecap="round"/>`;
     }
 
-    // Rechteck-Hintergrund (Karte)
-    const rect = `<rect x="${pad}" y="${pad}" width="${rw}" height="${rh}"
-                    fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
-                    rx="${svgRx}" ry="${svgRx}"/>`;
+    // Äußeres Kartenrechteck (Hintergrund + Rahmen)
+    const outerRect = `<rect x="${pad}" y="${pad}" width="${rw}" height="${rh}"
+                        fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
+                        rx="${svgRx}" ry="${svgRx}"/>`;
+
+    // Innen-Rechteck (Zifferblatt), zentriert – deckt inneren Tick-Teil ab
+    const innerRectRx = Math.max(0, svgRx * 0.8);
+    const innerRect = `<rect x="${(cx - innerEx).toFixed(2)}" y="${(cy - innerEy).toFixed(2)}"
+                           width="${(innerEx * 2).toFixed(2)}" height="${(innerEy * 2).toFixed(2)}"
+                           fill="${bgColor}" rx="${innerRectRx}" ry="${innerRectRx}"/>`;
 
     // Sekunden-Phase für korrekte Startstellung (Sekunde 0 -> 0°)
     const now = new Date();
@@ -252,12 +259,11 @@ class ClockTicksCard extends HTMLElement {
       display:flex; align-items:center; justify-content:center;
     `;
 
-    // Conic-Gradient als Hintergrund, nur in Tick-Schlitzen sichtbar (Maske)
-    // pointer-events:none => UI bleibt klickbar
+    // Conic-Gradient als Hintergrund – nur in Tick-Schlitzen sichtbar (Maske), mittig & UI-freundlich
     const secondsFO = html`
       <defs>
         <mask id="tick-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}">
-          <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
+          <rect x="0" y="0" width="${W}" height="${H}" fill="black"/>
           ${ticksMask}
         </mask>
       </defs>
@@ -267,16 +273,28 @@ class ClockTicksCard extends HTMLElement {
              style="position:relative;width:100%;height:100%; pointer-events:none;">
           <style>
             @keyframes sweep-spin { to { transform: rotate(360deg); } }
+            @media (prefers-reduced-motion: reduce) {
+              .seconds-sweep { animation-duration: 0.001s; }
+            }
           </style>
-          <div style="
-            position:absolute; width:500px; height:500px;
-            left:${cx - 125}px; top:${cy - 125}px;
-            background: conic-gradient(grey, grey, black);
-            transform-origin:center;
-            animation: sweep-spin 60s linear infinite;
-            animation-delay:${negDelay};
-            pointer-events:none;
-          "></div>
+          ${(() => {
+            const size = Math.max(W, H) * 1.5; // großzügig, damit keine Ränder bei Rotation
+            const left = (cx - size / 2).toFixed(2);
+            const top  = (cy - size / 2).toFixed(2);
+            return `
+              <div class="seconds-sweep" style="
+                position:absolute;
+                width:${size}px; height:${size}px;
+                left:${left}px; top:${top}px;
+                background: conic-gradient(grey, grey, black);
+                transform-origin:center;
+                animation: sweep-spin 60s linear infinite;
+                animation-delay:${negDelay};
+                will-change: transform;
+                pointer-events:none;
+              "></div>
+            `;
+          })()}
         </div>
       </foreignObject>
     `;
@@ -285,8 +303,9 @@ class ClockTicksCard extends HTMLElement {
       <div class="card-root" style="${wrapperStyle}">
         <svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none"
              style="position:absolute;inset:0;">
-          ${rect}
-          ${secondsFO}
+          ${outerRect}   <!-- 1) Hintergrund + Rahmen -->
+          ${secondsFO}   <!-- 2) animierter Gradient, nur durch Tick-Schlitze sichtbar -->
+          ${innerRect}   <!-- 3) Zifferblatt überdeckt inneren Tick-Bereich -->
         </svg>
         <div class="label" style="${labelStyle}">${entityState ?? '—'}</div>
       </div>
