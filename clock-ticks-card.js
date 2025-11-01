@@ -37,60 +37,36 @@ class ClockTicksCardEditor extends HTMLElement {
     const form = this.shadowRoot.querySelector('ha-form');
     if (!form) return;
 
-    // --- Schema ---
+    // --- Schema mit expliziten Labels ---
     const schema = [
-      { name: 'entity', selector: { entity: {} } },
+      { name: 'entity', label: 'Uhrzeit-Entity (z. B. sensor.uhrzeit)', selector: { entity: {} } },
 
       // Layout / Größe
-      { name: 'minHeightPx', selector: { number: { min: 0, max: 1000, step: 10 } } },
+      { name: 'minHeightPx', label: 'Mindesthöhe (px, falls Layout noch nicht geladen)', selector: { number: { min: 0, max: 1000, step: 10 } } },
 
       // Farben & Schrift
-      { name: 'bgColor', selector: { color: {} } },
-      { name: 'borderColor', selector: { color: {} } },
-      { name: 'tickColor', selector: { color: {} } },
-      { name: 'fontColor', selector: { color: {} } },
-      { name: 'fontWeight', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
-      { name: 'fontFamily', selector: { text: {} } },
+      { name: 'bgColor', label: 'Hintergrundfarbe', selector: { color: {} } },
+      { name: 'borderColor', label: 'Innenrand-Farbe', selector: { color: {} } },
+      { name: 'tickColor', label: 'Strich-Farbe (Ticks)', selector: { color: {} } },
+      { name: 'fontColor', label: 'Textfarbe (Uhrzeit)', selector: { color: {} } },
+      { name: 'fontWeight', label: 'Schriftstärke (Fettgrad)', selector: { select: { options: [400,500,600,700,800].map(v => ({ value: v, label: String(v) })) } } },
+      { name: 'fontFamily', label: 'Schriftart', selector: { text: {} } },
 
       // Äußerer Rahmen
-      { name: 'outerBorderColor', selector: { color: {} } },
-      { name: 'outerBorderWidth', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
+      { name: 'outerBorderColor', label: 'Rahmenfarbe außen', selector: { color: {} } },
+      { name: 'outerBorderWidth', label: 'Rahmenstärke außen (px)', selector: { number: { min: 0, max: 20, step: 1, mode: 'slider' } } },
 
       // Schriftgröße (%)
-      { name: 'fontSizePct', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
+      { name: 'fontSizePct', label: 'Schriftgröße (% der Kartenhöhe)', selector: { number: { min: 5, max: 80, step: 1, mode: 'slider' } } },
 
       // Feintuning SVG (klar benannt)
-      { name: 'padPct', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
-      { name: 'radiusPct', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
-      { name: 'tickLenPct', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
-      { name: 'tickThickPct', selector: { number: { min: 0, max: 5, step: 0.1, mode: 'slider' } } },
-      { name: 'borderPct', selector: { number: { min: 0, max: 10, step: 0.1, mode: 'slider' } } },
-      { name: 'labelTransformFactor', selector: { number: { min: -0.5, max: 0.5, step: 0.001 } } }
+      { name: 'padPct', label: 'Innenabstand zum Rand (%)', selector: { number: { min: 0, max: 20, step: 0.1, mode: 'slider' } } },
+      { name: 'radiusPct', label: 'Eckenrundung (SVG, %)', selector: { number: { min: 0, max: 40, step: 0.5, mode: 'slider' } } },
+      { name: 'tickLenPct', label: 'Länge der Striche (Ticks, %)', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
+      { name: 'tickThickPct', label: 'Dicke der Striche (Ticks, %)', selector: { number: { min: 0, max: 5, step: 0.1, mode: 'slider' } } },
+      { name: 'borderPct', label: 'Innenrand-Breite (%)', selector: { number: { min: 0, max: 10, step: 0.1, mode: 'slider' } } },
+      { name: 'labelTransformFactor', label: 'Vertikale Textposition (Feineinstellung)', selector: { number: { min: -0.5, max: 0.5, step: 0.001 } } }
     ];
-
-    // --- Benutzerfreundliche Labels (Deutsch) via computeLabel ---
-    const LABELS = {
-      entity: 'Uhrzeit-Entity (z. B. sensor.uhrzeit)',
-      minHeightPx: 'Mindesthöhe (px, falls Layout noch nicht geladen)',
-
-      bgColor: 'Hintergrundfarbe',
-      borderColor: 'Innenrand-Farbe',
-      tickColor: 'Strich-Farbe (Ticks)',
-      fontColor: 'Textfarbe (Uhrzeit)',
-      fontWeight: 'Schriftstärke (Fettgrad)',
-      fontFamily: 'Schriftart',
-
-      outerBorderColor: 'Rahmenfarbe außen',
-      outerBorderWidth: 'Rahmenstärke außen (px)',
-
-      fontSizePct: 'Schriftgröße (% der Kartenhöhe)',
-      padPct: 'Innenabstand zum Rand (%)',
-      radiusPct: 'Eckenrundung (SVG, %)',
-      tickLenPct: 'Länge der Striche (Ticks, %)',
-      tickThickPct: 'Dicke der Striche (Ticks, %)',
-      borderPct: 'Innenrand-Breite (%)',
-      labelTransformFactor: 'Vertikale Textposition (Feineinstellung)'
-    };
 
     form.schema = schema;
     form.data = {
@@ -110,8 +86,8 @@ class ClockTicksCardEditor extends HTMLElement {
     };
     form.hass = this._hass;
 
-    // Wichtig: computeLabel überschreibt die Standard-Labels von ha-form
-    form.computeLabel = (s) => LABELS[s.name] || s.name;
+    // computeLabel als Fallback (falls HA-Version Labels ignoriert)
+    form.computeLabel = (s) => s?.label || s?.name || '';
 
     if (!this._bound) {
       this._bound = true;
