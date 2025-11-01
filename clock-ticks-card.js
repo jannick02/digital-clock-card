@@ -1,7 +1,6 @@
 // clock-ticks-card.js
-// Skaliert NUR mit dem HA-Layout: Breite & Höhe kommen vom Container (rows/cols/Spans).
-// Features: anpassbare Schrift (fontSizePct), äußerer Rahmen, Theme-Radius, zentrierter Text.
-// Robust: Shadow DOM im Konstruktor; keine Null-Refs; ResizeObserver.
+// Skaliert mit HA-Layout (rows/Spans). Fix: nie wieder "dünner Balken" dank minHeight + robustem Messen.
+// Optionen: fontSizePct, outerBorderColor/Width, minHeightPx, Theme-Radius, zentrierter Text.
 
 class ClockTicksCardEditor extends HTMLElement {
   constructor() {
@@ -16,7 +15,8 @@ class ClockTicksCardEditor extends HTMLElement {
       <div class="wrap">
         <ha-form></ha-form>
         <div class="hint">
-          Größe kommt vollständig vom Dashboard-Layout (Spalten/Zeilen/Spans). Keine Ratio-Option.
+          Größe kommt vom Dashboard-Layout (Rows/Spans). Falls HA anfangs keine Höhe liefert,
+          sorgt <code>minHeightPx</code> für eine sinnvolle Mindesthöhe.
         </div>
       </div>
     `;
@@ -35,6 +35,9 @@ class ClockTicksCardEditor extends HTMLElement {
 
     const schema = [
       { name: 'entity', selector: { entity: {} } },
+
+      // Layout-Sicherheit
+      { name: 'minHeightPx', selector: { number: { min: 0, max: 1000, step: 10 } } },
 
       // Farben & Schrift
       { name: 'bgColor', selector: { color: {} } },
@@ -62,6 +65,9 @@ class ClockTicksCardEditor extends HTMLElement {
 
     form.schema = schema;
     form.data = {
+      // Sicherer Mindestwert gegen "dünnen Balken"
+      minHeightPx: 120,
+
       bgColor: 'white', borderColor: 'white', tickColor: '#A0A0A0', fontColor: 'black',
       fontWeight: 700,
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto',
@@ -72,6 +78,7 @@ class ClockTicksCardEditor extends HTMLElement {
       fontSizePct: 30,
       padPct: 6, radiusPct: 18, tickLenPct: 50, tickThickPct: 0.9, borderPct: 2.4,
       labelTransformFactor: -0.142,
+
       ...this._config
     };
     form.hass = this._hass;
@@ -110,6 +117,9 @@ class ClockTicksCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Erforderlich: 'entity' (z. B. sensor.aktuelle_uhrzeit)");
     this._config = {
+      // Sicherheits-Untergrenze gegen 0px-Höhe
+      minHeightPx: 120,
+
       // Farben & Schrift
       fontWeight: 700, fontColor: 'black', bgColor: 'white', tickColor: '#A0A0A0', borderColor: 'white',
       fontFamily: 'SF-Pro-Rounded, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Helvetica Neue, Arial, Noto Sans, sans-serif',
@@ -149,23 +159,26 @@ class ClockTicksCard extends HTMLElement {
     this._borderRadiusPx = px;
   }
 
-  // Nimmt die Container-Höhe (rows) wirklich ab:
+  // Container-Messung: echte Höhe vom HA-Layout; mehrere Fallbacks + minHeightPx
   _dims() {
+    const minH = Number(this._config.minHeightPx) || 0;
     const card = this.shadowRoot.querySelector('ha-card');
+
     let W = Math.max(1, card?.clientWidth ?? 300);
     let H = Math.max(0, card?.clientHeight ?? 0);
 
-    // Wenn HA den Height noch nicht gesetzt hat, versuche Eltern hochzuklettern:
-    if (H <= 1) {
+    // Wenn Höhe verdächtig klein ist, versuche Eltern hoch:
+    if (H < 40) {
       let el = card;
-      for (let i = 0; i < 6 && el && H <= 1; i++) {
+      for (let i = 0; i < 8 && el && H < 40; i++) {
         el = el.parentElement;
         const h = el ? (el.clientHeight || el.offsetHeight || 0) : 0;
         H = Math.max(H, h);
       }
     }
-    // Falls immer noch 0 → letzter Fallback (verhindert "Linie", wird beim nächsten Resize ersetzt)
-    if (H <= 1) H = Math.round(W * 0.5);
+
+    // Endgültige Untergrenze erzwingen
+    if (H < minH) H = minH;
 
     return { W, H };
   }
@@ -213,9 +226,9 @@ class ClockTicksCard extends HTMLElement {
                     fill="${bgColor}" stroke="${borderColor}" stroke-width="${borderW}"
                     rx="${svgRx}" ry="${svgRx}"/>`;
 
-    // Wrapper füllt Container vollständig (Breite & Höhe aus HA)
+    // Wrapper füllt Container; Höhe wird explizit gesetzt (gemessener Wert, minHeight greift sonst)
     const wrapperStyle = `
-      position:relative;display:block;width:100%;height:100%;
+      position:relative;display:block;width:100%;height:${H}px;
       border:${outerBorderWidth}px solid ${outerBorderColor};
       border-radius:var(--ha-card-border-radius, 12px);
       background:${bgColor};
@@ -276,7 +289,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'clock-ticks-card',
   name: 'Clock Ticks Card',
-  description: 'Skaliert vollständig mit dem HA-Layout (Rows/Spans). Theme-Radius, Rahmen & UI-Editor inklusive.',
+  description: 'Skaliert mit dem HA-Layout (Rows/Spans). Nie wieder dünner Balken dank minHeightPx + robustem Messen.',
   preview: true,
   documentationURL: 'https://github.com/yourname/clock-ticks-card'
 });
